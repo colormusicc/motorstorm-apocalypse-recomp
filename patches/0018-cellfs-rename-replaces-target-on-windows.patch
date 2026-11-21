@@ -1,0 +1,12 @@
+diff --git a/libs/filesystem/cellFs.c b/libs/filesystem/cellFs.c
+index 4d916ac..6fdcc50 100644
+--- a/libs/filesystem/cellFs.c
++++ b/libs/filesystem/cellFs.c
+@@ -963,6 +963,7 @@ s32 cellFsRename(const char* from, const char* to)
+         return (s32)CELL_ENOENT;
+ 
+     ensure_parent_dirs(host_to);
++    remove(host_to);   /* PS3/POSIX rename replaces the target; Windows rename() fails if it exists */
+ 
+     if (rename(host_from, host_to) != 0) {
+         printf("[cellFs] Rename: rename('%s', '%s') failed: %s\n",

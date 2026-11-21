@@ -1,0 +1,15 @@
+diff --git a/libs/font/cellFont.c b/libs/font/cellFont.c
+index 4e239b5..84c0f47 100644
+--- a/libs/font/cellFont.c
++++ b/libs/font/cellFont.c
+@@ -178,7 +178,9 @@ static FontSlot* font_get_slot(CellFont* font)
+ static float font_get_stb_scale(FontSlot* slot)
+ {
+     if (!slot->stb_valid) return 0.0f;
+-    return stbtt_ScaleForPixelHeight(&slot->stb_info, slot->scale_y);
++    /* The PS3 library (FreeType) treats the pixel size as the em size, not ascent - descent:
++     * ScaleForPixelHeight drew every glyph noticeably smaller than the game expects. */
++    return stbtt_ScaleForMappingEmToPixels(&slot->stb_info, slot->scale_y);
+ }
+ #endif
+ 

@@ -51,7 +51,7 @@ No crashes (`FAULT 0`, `D3D12-LOST 0`) on 10-minute runs.
 | Path | What |
 |---|---|
 | `port/` | The game project: `main.cpp`, `game_fixes.cpp` (title-specific hooks/HLE), `prx_modules.cpp` (LLE firmware), `diag.cpp`, `CMakeLists.txt` |
-| `patches/` | Changes to ps3recomp, `0001…0016` in order (= `ALL-repo-changes.patch`) |
+| `patches/` | Changes to ps3recomp, `0001…0019` in order (= `ALL-repo-changes.patch`) |
 | `tools/` | Build/run scripts, ELF survey, SPU image extraction/lifting, VFS builder, log symbolizer |
 | `NOTES.md` | **Full engineering log** (in Russian): every bug found, how it was verified, env-vars, current blockers. Start with the section «ГДЕ СТОИМ» at the end |
 

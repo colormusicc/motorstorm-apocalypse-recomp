@@ -1158,3 +1158,10 @@ waiting) и останавливает SPU, если `running & waiting`, `ready
 3. Извлечь и перевести `Wws_Job` policy module (0x123B100, 12 160 байт). В build_spu_workloads есть
    пример `--extra-funcs pm_wwsjob=0xA2C`: похоже, этот PM ps3recomp уже встречал. Затем ловить
    job-модули через `SPU_DUMP_MISS`.
+
+### 2026-11-21: three small ps3recomp fixes from the EU (BCES00484 1.06) port (patches 0017-0019)
+
+- `0017` vdec: `CELL_VDEC_CODEC_TYPE_DIVX` -> `AV_CODEC_ID_MPEG4` in the FFmpeg path (the intro movies are DivX / MPEG-4 ASP; this is the line noted above as missing). Needs `PS3RECOMP_FFMPEG_RUNTIME` and FFmpeg shared DLLs (tested with FFmpeg 8.1 LGPL shared). **Built and running in the EU port, but the picture is not verified there** (that port skips the intros), so it needs a run here with the intros on.
+- `0018` cellFs: `cellFsRename` deletes an existing target first. PS3/POSIX rename replaces it, Windows `rename()` fails, so saving over an existing file failed. Not run-tested in this port.
+- `0019` cellFont: glyph scale by the em (`stbtt_ScaleForMappingEmToPixels`) like the real FreeType-based library, instead of ascent-descent (`ScaleForPixelHeight`), which drew text smaller than the game lays it out. In the EU port since 2026-11-04 (health warning and menus draw with the game's own fonts); no A/B comparison in this port yet.
+- Checked: the series applies on a clean ps3recomp `4e8f3ca`, and `ALL-repo-changes.patch` (0017-0019 appended) applies and gives the same three files.

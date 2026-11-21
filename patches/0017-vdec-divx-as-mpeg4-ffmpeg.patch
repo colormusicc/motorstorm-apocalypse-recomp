@@ -1,0 +1,12 @@
+diff --git a/libs/codec/vdec_ffmpeg.c b/libs/codec/vdec_ffmpeg.c
+index 5bea1a9..a902b54 100644
+--- a/libs/codec/vdec_ffmpeg.c
++++ b/libs/codec/vdec_ffmpeg.c
+@@ -97,6 +97,7 @@ VdecFf* vdec_ff_open(u32 codec_type)
+     enum AVCodecID id;
+     if (codec_type == CELL_VDEC_CODEC_TYPE_AVC)        id = AV_CODEC_ID_H264;
+     else if (codec_type == CELL_VDEC_CODEC_TYPE_MPEG2) id = AV_CODEC_ID_MPEG2VIDEO;
++    else if (codec_type == CELL_VDEC_CODEC_TYPE_DIVX)  id = AV_CODEC_ID_MPEG4;   /* DivX = MPEG-4 Part 2 (ASP) */
+     else return NULL;
+ 
+     const PS3FFmpeg* ff = ps3_ffmpeg_get();
