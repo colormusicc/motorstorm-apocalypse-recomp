@@ -1,0 +1,42 @@
+diff --git a/libs/video/rsx_d3d12_backend.c b/libs/video/rsx_d3d12_backend.c
+index 9dbbb9c1..8b463d28 100644
+--- a/libs/video/rsx_d3d12_backend.c
++++ b/libs/video/rsx_d3d12_backend.c
+@@ -218,7 +218,7 @@ typedef struct {
+  * so every draw past the fourth got slot -1 from vp_upload_tex_slot ("out of
+  * slots") and drew UNTEXTURED. That reads as a correctly-lit but solid black
+  * object, which is indistinguishable from a missing texture upload. */
+-#define VP_TEX_SLOTS 192
++#define VP_TEX_SLOTS 2048   /* race frames bind ~275 textures: the late draws (HUD, riders) got NULL SRVs */
+ /* Guest texture uploads are staged in one persistently mapped upload buffer,
+  * a part per frame in flight, reset when that frame's command allocator is
+  * (the GPU has finished its copies by then). A committed upload buffer per
+@@ -3046,11 +3046,18 @@ static int vp_upload_tex_slot(u32 off, u32 w, u32 h, u32 fmt, int cube, u32 mips
+      * here was a GCC/Clang extension MSVC rejects.) */
+     #define TEX_CSUM(base, nbytes) tex_csum((base), (nbytes))
+     int slot = -1, freeslot = -1;
+-    for (int i = 0; i < VP_TEX_SLOTS; i++) {
++    /* Hint table: offset -> slot of its last hit, so a 2048-slot cache does not cost a full scan per bind. */
++    static int s_tex_hint[4096];
++    const u32 hk = ((key_off >> 4) ^ (key_off >> 16) ^ w ^ (h << 5)) & 4095u;
++    int hint_i = s_tex_hint[hk] - 1;
++    for (int it = -1; it < VP_TEX_SLOTS; it++) {
++        const int i = it < 0 ? hint_i : it;
++        if (i < 0) continue;
+         VPTexSlot* c = &s_d3d.vp_tex[i];
++        if (it < 0 && !(c->res && c->key == key_off && c->w == w && c->h == h && c->fmt == fmt && c->cube == cube)) continue;
+         if (c->res && c->key == key_off && c->w == w && c->h == h && c->fmt == fmt
+             && c->cube == cube) {
+-            c->last_frame = s_d3d.frame_count;
++            c->last_frame = s_d3d.frame_count; s_tex_hint[hk] = i + 1;
+             if (c->used) return i;                /* already bound this frame */
+             { static int nocache = -1;            /* TEX_NOCACHE=1: always re-upload */
+               if (nocache < 0) { const char* e = getenv("TEX_NOCACHE");
+@@ -3126,6 +3133,7 @@ static int vp_upload_tex_slot(u32 off, u32 w, u32 h, u32 fmt, int cube, u32 mips
+      * free one. Without this the stale path fell through to freeslot and either
+      * duplicated the texture into a second slot or bailed when none was free. */
+     if (slot < 0 && freeslot < 0) return -1;      /* out of slots this frame */
++    s_tex_hint[hk] = (slot >= 0 ? slot : freeslot) + 1;
+     /* TEX_SRCDBG=<N>: is the guest memory this slot uploads FROM actually
+      * populated? An empty source and a broken sampler both render flat. */
+     { static int cap = -1, n = 0;

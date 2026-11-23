@@ -1691,3 +1691,190 @@ index 4e239b5..84c0f47 100644
  }
  #endif
  
+diff --git a/libs/video/cellVideoOut.c b/libs/video/cellVideoOut.c
+index c67a6eaa..ae218d55 100644
+--- a/libs/video/cellVideoOut.c
++++ b/libs/video/cellVideoOut.c
+@@ -5,6 +5,7 @@
+  * Defaults to 1280x720 (720p).
+  */
+ 
++#include <stdlib.h>
+ #include "cellVideoOut.h"
+ #include "ps3emu/endian.h"
+ #include "../../runtime/ppu/ppu_memory.h"   /* vm_base (guest mem) */
+@@ -251,5 +252,9 @@ s32 cellVideoOutGetResolutionAvailability(u32 videoOut, u32 resolutionId,
+     (void)aspect; (void)option;
+     printf("[cellVideoOut] GetResolutionAvailability(out=%u, res=%u) -> 1\n",
+            videoOut, resolutionId);
++    /* 3D modes (ids >= 0x80: frame packing / SimulView) are NOT available, as on a 2D TV (RPCS3 default).
++     * Reporting them made MotorStorm Apocalypse switch to its 3D/SimulView setup (SimulView notice on
++     * entering Wreckreation). PS3_STEREO3D=1 = old behaviour. */
++    if (resolutionId >= 0x80 && !getenv("PS3_STEREO3D")) return 0;
+     return (videoOut == CELL_VIDEO_OUT_PRIMARY) ? 1 : 0;
+ }
+diff --git a/libs/video/rsx_d3d12_backend.c b/libs/video/rsx_d3d12_backend.c
+index 18e5f2dd..9dbbb9c1 100644
+--- a/libs/video/rsx_d3d12_backend.c
++++ b/libs/video/rsx_d3d12_backend.c
+@@ -139,7 +139,7 @@ typedef struct {
+     /* Guest viewport rect at draw time (target pixels). Sub-viewport layouts
+      * (wave's debug tiles) position quads with this, not with constants --
+      * forcing full-target viewports drew every tile window-sized. */
+-    u32 vp_x, vp_y, vp_w, vp_h;
++    u32 vp_x, vp_y, vp_w, vp_h; u32 sc_x, sc_y, sc_w, sc_h;   /* guest scissor (NV4097_SET_SCISSOR_*) */
+     /* Ordered clear op (offscreen surfaces only; display clears stay the
+      * frame-start backbuffer clear). is_clear records also set is_vp so the
+      * legacy replay pass skips them. */
+@@ -5670,6 +5670,14 @@ static void render_frame(void)
+                     D3D12_RECT dsc = {(LONG)dvp.TopLeftX, (LONG)dvp.TopLeftY,
+                                       (LONG)(dvp.TopLeftX + dvp.Width),
+                                       (LONG)(dvp.TopLeftY + dvp.Height)};
++                    { static int nosc = -1; if (nosc < 0) nosc = getenv("SCISSOR_OFF") ? 1 : 0;
++                      /* Guest scissor (UI list clipping: track select, splash panels). SCISSOR_OFF=1 = old. */
++                      if (!nosc && dr->sc_w && dr->sc_h && dr->sc_w < 4096 && dr->sc_h < 4096) {
++                          LONG sx0 = (LONG)dr->sc_x, sy0 = (LONG)dr->sc_y;
++                          LONG sx1 = sx0 + (LONG)dr->sc_w, sy1 = sy0 + (LONG)dr->sc_h;
++                          if (sx0 > dsc.left) dsc.left = sx0; if (sy0 > dsc.top) dsc.top = sy0;
++                          if (sx1 < dsc.right) dsc.right = sx1; if (sy1 < dsc.bottom) dsc.bottom = sy1;
++                          if (dsc.right < dsc.left) dsc.right = dsc.left; if (dsc.bottom < dsc.top) dsc.bottom = dsc.top; } }
+                     dvp_x = dvp.TopLeftX; dvp_y = dvp.TopLeftY;
+                     dvp_w = dvp.Width;    dvp_h = dvp.Height;
+                     s_d3d.cmd_list->lpVtbl->RSSetViewports(s_d3d.cmd_list, 1, &dvp);
+@@ -7454,7 +7462,8 @@ static void d3d12_draw_arrays(void* ud, u32 primitive, u32 first, u32 count)
+                     dr->vp_y = s_d3d.current_rsx_state->viewport_y;
+                     dr->vp_w = s_d3d.current_rsx_state->viewport_w;
+                     dr->vp_h = s_d3d.current_rsx_state->viewport_h;
+-                } else { dr->vp_x = dr->vp_y = dr->vp_w = dr->vp_h = 0; }
++                    dr->sc_x = s_d3d.current_rsx_state->scissor_x; dr->sc_y = s_d3d.current_rsx_state->scissor_y; dr->sc_w = s_d3d.current_rsx_state->scissor_w; dr->sc_h = s_d3d.current_rsx_state->scissor_h;
++                } else { dr->vp_x = dr->vp_y = dr->vp_w = dr->vp_h = 0; dr->sc_x = dr->sc_y = 0; dr->sc_w = dr->sc_h = 4096; }
+                 dr->cb_slot = s_d3d.draw_count;
+                 vp_record_cb(s_d3d.draw_count, dr->vs_idx, dr);
+                 s_d3d.draw_count++;
+@@ -7569,7 +7578,8 @@ static void d3d12_draw_arrays(void* ud, u32 primitive, u32 first, u32 count)
+                 dr->vp_y = s_d3d.current_rsx_state->viewport_y;
+                 dr->vp_w = s_d3d.current_rsx_state->viewport_w;
+                 dr->vp_h = s_d3d.current_rsx_state->viewport_h;
+-            } else { dr->vp_x = dr->vp_y = dr->vp_w = dr->vp_h = 0; }
++                dr->sc_x = s_d3d.current_rsx_state->scissor_x; dr->sc_y = s_d3d.current_rsx_state->scissor_y; dr->sc_w = s_d3d.current_rsx_state->scissor_w; dr->sc_h = s_d3d.current_rsx_state->scissor_h;
++            } else { dr->vp_x = dr->vp_y = dr->vp_w = dr->vp_h = 0; dr->sc_x = dr->sc_y = 0; dr->sc_w = dr->sc_h = 4096; }
+             dr->cb_slot = s_d3d.draw_count;
+                 vp_record_cb(s_d3d.draw_count, dr->vs_idx, dr);
+             s_d3d.draw_count++;
+@@ -7736,7 +7746,8 @@ static void d3d12_draw_indexed(void* ud, u32 primitive, u32 first, u32 count)
+             dr->vp_y = s_d3d.current_rsx_state->viewport_y;
+             dr->vp_w = s_d3d.current_rsx_state->viewport_w;
+             dr->vp_h = s_d3d.current_rsx_state->viewport_h;
+-        } else { dr->vp_x = dr->vp_y = dr->vp_w = dr->vp_h = 0; }
++            dr->sc_x = s_d3d.current_rsx_state->scissor_x; dr->sc_y = s_d3d.current_rsx_state->scissor_y; dr->sc_w = s_d3d.current_rsx_state->scissor_w; dr->sc_h = s_d3d.current_rsx_state->scissor_h;
++        } else { dr->vp_x = dr->vp_y = dr->vp_w = dr->vp_h = 0; dr->sc_x = dr->sc_y = 0; dr->sc_w = dr->sc_h = 4096; }
+         dr->cb_slot = s_d3d.draw_count;
+                 vp_record_cb(s_d3d.draw_count, dr->vs_idx, dr);
+         s_d3d.draw_count++;
+diff --git a/libs/video/rsx_d3d12_backend.c b/libs/video/rsx_d3d12_backend.c
+index 9dbbb9c1..8b463d28 100644
+--- a/libs/video/rsx_d3d12_backend.c
++++ b/libs/video/rsx_d3d12_backend.c
+@@ -218,7 +218,7 @@ typedef struct {
+  * so every draw past the fourth got slot -1 from vp_upload_tex_slot ("out of
+  * slots") and drew UNTEXTURED. That reads as a correctly-lit but solid black
+  * object, which is indistinguishable from a missing texture upload. */
+-#define VP_TEX_SLOTS 192
++#define VP_TEX_SLOTS 2048   /* race frames bind ~275 textures: the late draws (HUD, riders) got NULL SRVs */
+ /* Guest texture uploads are staged in one persistently mapped upload buffer,
+  * a part per frame in flight, reset when that frame's command allocator is
+  * (the GPU has finished its copies by then). A committed upload buffer per
+@@ -3046,11 +3046,18 @@ static int vp_upload_tex_slot(u32 off, u32 w, u32 h, u32 fmt, int cube, u32 mips
+      * here was a GCC/Clang extension MSVC rejects.) */
+     #define TEX_CSUM(base, nbytes) tex_csum((base), (nbytes))
+     int slot = -1, freeslot = -1;
+-    for (int i = 0; i < VP_TEX_SLOTS; i++) {
++    /* Hint table: offset -> slot of its last hit, so a 2048-slot cache does not cost a full scan per bind. */
++    static int s_tex_hint[4096];
++    const u32 hk = ((key_off >> 4) ^ (key_off >> 16) ^ w ^ (h << 5)) & 4095u;
++    int hint_i = s_tex_hint[hk] - 1;
++    for (int it = -1; it < VP_TEX_SLOTS; it++) {
++        const int i = it < 0 ? hint_i : it;
++        if (i < 0) continue;
+         VPTexSlot* c = &s_d3d.vp_tex[i];
++        if (it < 0 && !(c->res && c->key == key_off && c->w == w && c->h == h && c->fmt == fmt && c->cube == cube)) continue;
+         if (c->res && c->key == key_off && c->w == w && c->h == h && c->fmt == fmt
+             && c->cube == cube) {
+-            c->last_frame = s_d3d.frame_count;
++            c->last_frame = s_d3d.frame_count; s_tex_hint[hk] = i + 1;
+             if (c->used) return i;                /* already bound this frame */
+             { static int nocache = -1;            /* TEX_NOCACHE=1: always re-upload */
+               if (nocache < 0) { const char* e = getenv("TEX_NOCACHE");
+@@ -3126,6 +3133,7 @@ static int vp_upload_tex_slot(u32 off, u32 w, u32 h, u32 fmt, int cube, u32 mips
+      * free one. Without this the stale path fell through to freeslot and either
+      * duplicated the texture into a second slot or bailed when none was free. */
+     if (slot < 0 && freeslot < 0) return -1;      /* out of slots this frame */
++    s_tex_hint[hk] = (slot >= 0 ? slot : freeslot) + 1;
+     /* TEX_SRCDBG=<N>: is the guest memory this slot uploads FROM actually
+      * populated? An empty source and a broken sampler both render flat. */
+     { static int cap = -1, n = 0;
+diff --git a/libs/video/rsx_d3d12_backend.c b/libs/video/rsx_d3d12_backend.c
+index 8b463d28..752ab930 100644
+--- a/libs/video/rsx_d3d12_backend.c
++++ b/libs/video/rsx_d3d12_backend.c
+@@ -6962,6 +6962,25 @@ static u32 upload_tris_vp(const rsx_state* state, u32 first, u32 count)
+  * non-indexed 4-vertex strip (prim 6); without this it fell to the fixed-
+  * function fallback with is_vp=0 (no vertex-program transform -> the quad
+  * collapsed to a line) and textured=0 (the Y/U/V planes never sampled). */
++/* RSX splits one strip into DRAW_*ARRAY packets of <= 256 inside one BEGIN/END and the hardware joins them.
++ * Each packet used to become its own strip: the 2 triangles across every boundary were lost (holes in the
++ * rider/vehicle meshes). A packet that continues the previous one re-reads its last 2 vertices and keeps the
++ * winding parity. STRIP_NOCONT=1 = old behaviour. */
++static u32 s_strip_par = 0;
++static void strip_cont(int indexed, u32 prim, u32* first, u32* count)
++{
++    static u32 ep0 = ~0u, end0 = ~0u, start0 = 0, ixoff0 = 0; static int ix0 = -1, off = -1;
++    if (off < 0) off = getenv("STRIP_NOCONT") ? 1 : 0;
++    s_strip_par = 0;
++    const rsx_state* st = s_d3d.current_rsx_state;
++    if (!st || prim != RSX_PRIMITIVE_TRIANGLE_STRIP) { end0 = ~0u; return; }
++    const u32 f = *first, c = *count, ep = st->begin_epoch;
++    if (!off && ep == ep0 && indexed == ix0 && f == end0 && f >= start0 + 2 &&
++        (!indexed || st->index_array_offset == ixoff0)) {
++        s_strip_par = (f - 2 - start0) & 1; *first = f - 2; *count = c + 2;
++    } else start0 = f;
++    ep0 = ep; ix0 = indexed; end0 = f + c; ixoff0 = st->index_array_offset;
++}
+ static u32 upload_strip_vp(const rsx_state* state, u32 first, u32 count, int fan)
+ {
+     extern uint8_t* vm_base;
+@@ -6979,7 +6998,7 @@ static u32 upload_strip_vp(const rsx_state* state, u32 first, u32 count, int fan
+         u32 i0 = fan ? 0 : t;
+         /* strip winding alternates per triangle to keep facing consistent */
+         u32 i1 = t + 1, i2 = t + 2;
+-        if (!fan && (t & 1)) { u32 tmp = i1; i1 = i2; i2 = tmp; }
++        if (!fan && ((t + s_strip_par) & 1)) { u32 tmp = i1; i1 = i2; i2 = tmp; }
+         read_vp_vertex_cached(state, first + i0, &out[o*16]); o++;
+         read_vp_vertex_cached(state, first + i1, &out[o*16]); o++;
+         read_vp_vertex_cached(state, first + i2, &out[o*16]); o++;
+@@ -7369,7 +7388,7 @@ static u32 upload_strip_vp_indexed(const rsx_state* state, u32 first, u32 count,
+     for (u32 t = 0; t < tris; t++) {
+         u32 i0 = fan ? 0 : t;
+         u32 i1 = t + 1, i2 = t + 2;
+-        if (!fan && (t & 1)) { u32 tmp = i1; i1 = i2; i2 = tmp; }
++        if (!fan && ((t + s_strip_par) & 1)) { u32 tmp = i1; i1 = i2; i2 = tmp; }
+         read_vp_vertex_cached(state, read_guest_index(state, first + i0), &out[o*16]); o++;
+         read_vp_vertex_cached(state, read_guest_index(state, first + i1), &out[o*16]); o++;
+         read_vp_vertex_cached(state, read_guest_index(state, first + i2), &out[o*16]); o++;
+@@ -7512,7 +7531,7 @@ static void d3d12_draw_arrays(void* ud, u32 primitive, u32 first, u32 count)
+         u32 rec = s_d3d.vp_vb_offset;
+         u32 emitted = (primitive == RSX_PRIMITIVE_TRIANGLES)
+             ? upload_tris_vp(s_d3d.current_rsx_state, first, count)
+-            : upload_strip_vp(s_d3d.current_rsx_state, first, count, primitive == RSX_PRIMITIVE_TRIANGLE_FAN);
++            : (strip_cont(0, primitive, &first, &count), upload_strip_vp(s_d3d.current_rsx_state, first, count, primitive == RSX_PRIMITIVE_TRIANGLE_FAN));
+         /* RSX splits one primitive stream across several DRAW_ARRAYS entries
+          * inside a single BEGIN/END (each carries at most 256 vertices), and the
+          * hardware concatenates them before assembling primitives. Recording a
+@@ -7653,6 +7672,7 @@ static void d3d12_draw_indexed(void* ud, u32 primitive, u32 first, u32 count)
+      * list. Other primitives are skipped rather than drawn wrong. */
+     u32 emitted = 0;
+     u32 rec = s_d3d.vp_vb_offset;
++    strip_cont(1, primitive, &first, &count);
+     const long long vs_t0 = vs_begin_indexed(s_d3d.current_rsx_state, primitive, first, count);
+     int ix_used = 0, ix_cont = 0;
+     const u32 ib0 = s_d3d.vp_ib_offset;

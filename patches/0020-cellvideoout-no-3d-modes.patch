@@ -1,0 +1,22 @@
+diff --git a/libs/video/cellVideoOut.c b/libs/video/cellVideoOut.c
+index c67a6eaa..ae218d55 100644
+--- a/libs/video/cellVideoOut.c
++++ b/libs/video/cellVideoOut.c
+@@ -5,6 +5,7 @@
+  * Defaults to 1280x720 (720p).
+  */
+ 
++#include <stdlib.h>
+ #include "cellVideoOut.h"
+ #include "ps3emu/endian.h"
+ #include "../../runtime/ppu/ppu_memory.h"   /* vm_base (guest mem) */
+@@ -251,5 +252,9 @@ s32 cellVideoOutGetResolutionAvailability(u32 videoOut, u32 resolutionId,
+     (void)aspect; (void)option;
+     printf("[cellVideoOut] GetResolutionAvailability(out=%u, res=%u) -> 1\n",
+            videoOut, resolutionId);
++    /* 3D modes (ids >= 0x80: frame packing / SimulView) are NOT available, as on a 2D TV (RPCS3 default).
++     * Reporting them made MotorStorm Apocalypse switch to its 3D/SimulView setup (SimulView notice on
++     * entering Wreckreation). PS3_STEREO3D=1 = old behaviour. */
++    if (resolutionId >= 0x80 && !getenv("PS3_STEREO3D")) return 0;
+     return (videoOut == CELL_VIDEO_OUT_PRIMARY) ? 1 : 0;
+ }

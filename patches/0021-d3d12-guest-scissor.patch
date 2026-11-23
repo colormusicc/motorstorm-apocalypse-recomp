@@ -1,0 +1,58 @@
+diff --git a/libs/video/rsx_d3d12_backend.c b/libs/video/rsx_d3d12_backend.c
+index 18e5f2dd..9dbbb9c1 100644
+--- a/libs/video/rsx_d3d12_backend.c
++++ b/libs/video/rsx_d3d12_backend.c
+@@ -139,7 +139,7 @@ typedef struct {
+     /* Guest viewport rect at draw time (target pixels). Sub-viewport layouts
+      * (wave's debug tiles) position quads with this, not with constants --
+      * forcing full-target viewports drew every tile window-sized. */
+-    u32 vp_x, vp_y, vp_w, vp_h;
++    u32 vp_x, vp_y, vp_w, vp_h; u32 sc_x, sc_y, sc_w, sc_h;   /* guest scissor (NV4097_SET_SCISSOR_*) */
+     /* Ordered clear op (offscreen surfaces only; display clears stay the
+      * frame-start backbuffer clear). is_clear records also set is_vp so the
+      * legacy replay pass skips them. */
+@@ -5670,6 +5670,14 @@ static void render_frame(void)
+                     D3D12_RECT dsc = {(LONG)dvp.TopLeftX, (LONG)dvp.TopLeftY,
+                                       (LONG)(dvp.TopLeftX + dvp.Width),
+                                       (LONG)(dvp.TopLeftY + dvp.Height)};
++                    { static int nosc = -1; if (nosc < 0) nosc = getenv("SCISSOR_OFF") ? 1 : 0;
++                      /* Guest scissor (UI list clipping: track select, splash panels). SCISSOR_OFF=1 = old. */
++                      if (!nosc && dr->sc_w && dr->sc_h && dr->sc_w < 4096 && dr->sc_h < 4096) {
++                          LONG sx0 = (LONG)dr->sc_x, sy0 = (LONG)dr->sc_y;
++                          LONG sx1 = sx0 + (LONG)dr->sc_w, sy1 = sy0 + (LONG)dr->sc_h;
++                          if (sx0 > dsc.left) dsc.left = sx0; if (sy0 > dsc.top) dsc.top = sy0;
++                          if (sx1 < dsc.right) dsc.right = sx1; if (sy1 < dsc.bottom) dsc.bottom = sy1;
++                          if (dsc.right < dsc.left) dsc.right = dsc.left; if (dsc.bottom < dsc.top) dsc.bottom = dsc.top; } }
+                     dvp_x = dvp.TopLeftX; dvp_y = dvp.TopLeftY;
+                     dvp_w = dvp.Width;    dvp_h = dvp.Height;
+                     s_d3d.cmd_list->lpVtbl->RSSetViewports(s_d3d.cmd_list, 1, &dvp);
+@@ -7454,7 +7462,8 @@ static void d3d12_draw_arrays(void* ud, u32 primitive, u32 first, u32 count)
+                     dr->vp_y = s_d3d.current_rsx_state->viewport_y;
+                     dr->vp_w = s_d3d.current_rsx_state->viewport_w;
+                     dr->vp_h = s_d3d.current_rsx_state->viewport_h;
+-                } else { dr->vp_x = dr->vp_y = dr->vp_w = dr->vp_h = 0; }
++                    dr->sc_x = s_d3d.current_rsx_state->scissor_x; dr->sc_y = s_d3d.current_rsx_state->scissor_y; dr->sc_w = s_d3d.current_rsx_state->scissor_w; dr->sc_h = s_d3d.current_rsx_state->scissor_h;
++                } else { dr->vp_x = dr->vp_y = dr->vp_w = dr->vp_h = 0; dr->sc_x = dr->sc_y = 0; dr->sc_w = dr->sc_h = 4096; }
+                 dr->cb_slot = s_d3d.draw_count;
+                 vp_record_cb(s_d3d.draw_count, dr->vs_idx, dr);
+                 s_d3d.draw_count++;
+@@ -7569,7 +7578,8 @@ static void d3d12_draw_arrays(void* ud, u32 primitive, u32 first, u32 count)
+                 dr->vp_y = s_d3d.current_rsx_state->viewport_y;
+                 dr->vp_w = s_d3d.current_rsx_state->viewport_w;
+                 dr->vp_h = s_d3d.current_rsx_state->viewport_h;
+-            } else { dr->vp_x = dr->vp_y = dr->vp_w = dr->vp_h = 0; }
++                dr->sc_x = s_d3d.current_rsx_state->scissor_x; dr->sc_y = s_d3d.current_rsx_state->scissor_y; dr->sc_w = s_d3d.current_rsx_state->scissor_w; dr->sc_h = s_d3d.current_rsx_state->scissor_h;
++            } else { dr->vp_x = dr->vp_y = dr->vp_w = dr->vp_h = 0; dr->sc_x = dr->sc_y = 0; dr->sc_w = dr->sc_h = 4096; }
+             dr->cb_slot = s_d3d.draw_count;
+                 vp_record_cb(s_d3d.draw_count, dr->vs_idx, dr);
+             s_d3d.draw_count++;
+@@ -7736,7 +7746,8 @@ static void d3d12_draw_indexed(void* ud, u32 primitive, u32 first, u32 count)
+             dr->vp_y = s_d3d.current_rsx_state->viewport_y;
+             dr->vp_w = s_d3d.current_rsx_state->viewport_w;
+             dr->vp_h = s_d3d.current_rsx_state->viewport_h;
+-        } else { dr->vp_x = dr->vp_y = dr->vp_w = dr->vp_h = 0; }
++            dr->sc_x = s_d3d.current_rsx_state->scissor_x; dr->sc_y = s_d3d.current_rsx_state->scissor_y; dr->sc_w = s_d3d.current_rsx_state->scissor_w; dr->sc_h = s_d3d.current_rsx_state->scissor_h;
++        } else { dr->vp_x = dr->vp_y = dr->vp_w = dr->vp_h = 0; dr->sc_x = dr->sc_y = 0; dr->sc_w = dr->sc_h = 4096; }
+         dr->cb_slot = s_d3d.draw_count;
+                 vp_record_cb(s_d3d.draw_count, dr->vs_idx, dr);
+         s_d3d.draw_count++;

@@ -93,7 +93,7 @@ Read [`CONTRIBUTING.md`](CONTRIBUTING.md) first, then dig into [`NOTES.md`](NOTE
 ```text
 port/       the game project: main.cpp, game_fixes.cpp (title hooks/HLE),
             prx_modules.cpp (LLE firmware), diag.cpp, CMakeLists.txt
-patches/    changes to ps3recomp, 0001…0019 in order (= ALL-repo-changes.patch)
+patches/    changes to ps3recomp, 0001…0023 in order (= ALL-repo-changes.patch)
 tools/      build/run scripts, ELF survey, SPU extraction + lifting, VFS builder, symbolizer
 assets/     README artwork
 NOTES.md    full engineering log: every bug, how it was verified, env vars, blockers
@@ -152,7 +152,7 @@ tools/run_port.sh 300       # runs with a time limit and writes logs/port-<stamp
 ## 🙌 Credits
 
 - **[ps3recomp](https://github.com/sp00nznet/ps3recomp)** by sp00nznet and contributors (MIT)
-- **[@Killeboi](https://github.com/Killeboi)**: EU port, race loading, patches 0017–0019
+- **[@Killeboi](https://github.com/Killeboi)**: EU port, race loading, patches 0017–0023
 - **Shad**: help on the EU port
 - **RPCS3**: reference for correct behaviour
 - Everyone in the MotorStorm community who tests, reverses and reports 🧡
